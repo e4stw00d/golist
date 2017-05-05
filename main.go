@@ -13,16 +13,28 @@ type Task struct {
 }
 
 var wg sync.WaitGroup
+var m sync.Mutex
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 
-	tasks := make(chan Task, 100)
+	l := 100
+	a := l
+
+	tasks := make(chan Task, 2)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
-			tasks <- Task{"1", rand.Float64()}
+		for i := 0; i < l; i++ {
+			Println(i)
+			select {
+			case tasks <- Task{"1", rand.Float64()}:
+			default:
+				i--
+				// Println("OVERFLOW, WAITING")
+				time.Sleep(300 * time.Millisecond)
+			}
 		}
 	}()
 
@@ -34,17 +46,27 @@ func main() {
 			case task, ok := <-tasks:
 				if ok {
 					Println(task)
+					m.Lock()
+					a--
+					m.Unlock()
 					if task.Attemts >= 0.5 {
 						task.Attemts -= .1
 						tasks <- task
+						m.Lock()
+						a++
+						m.Unlock()
 					}
 				}
 			default:
 				time.Sleep(time.Millisecond)
+				if a == 0 {
+					return
+				}
 				continue
 			}
 		}
 	}()
 
 	wg.Wait()
+	Println(a)
 }
